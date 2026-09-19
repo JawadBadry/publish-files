@@ -3,112 +3,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>موقع رفع الملفات وتوليد الروابط</title>
-    <!-- استخدام Tailwind CSS للتصميم السريع والاحترافي -->
+    <title>مشاركة الملفات المباشرة (P2P)</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- مكتبة PeerJS للربط المباشر بين الأجهزة بدون سيرفر -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
-        body {
-            font-family: 'Cairo', sans-serif;
-        }
+        body { font-family: 'Cairo', sans-serif; }
     </style>
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
 
-    <div class="w-full max-w-lg bg-gray-900 border border-gray-800 rounded-2xl shadow-xl p-6 sm:p-8">
-        <!-- العنوان -->
-        <div class="text-center mb-6">
-            <h1 class="text-2xl font-bold text-white mb-2">مركز رفع الملفات</h1>
-            <p class="text-gray-400 text-sm">ارفع أي ملف واحصل على رابط مباشر لتحميله فوراً</p>
+    <div class="w-full max-w-lg bg-gray-900 border border-gray-800 rounded-2xl shadow-xl p-6 sm:p-8 text-center">
+        <h1 class="text-2xl font-bold text-white mb-2">مشاركة الملفات المباشرة</h1>
+        <p class="text-gray-400 text-sm mb-6">شارك الملفات من جهازك لصديقك مباشرة بدون رفعها على أي سيرفر!</p>
+
+        <!-- حالة الاتصال -->
+        <div id="status-badge" class="mb-4 inline-block px-3 py-1 rounded-full text-xs font-semibold bg-yellow-950 text-yellow-400 border border-yellow-800">
+            جاري الاتصال بالشبكة...
         </div>
 
-        <!-- منطقة اختيار الملف (Drop Zone) -->
-        <div id="drop-zone" class="border-2 border-dashed border-gray-700 hover:border-emerald-500 rounded-xl p-8 text-center cursor-pointer transition-all bg-gray-950/50 mb-6 relative">
-            <input type="file" id="file-input" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="handleFileSelect(event)">
-            <div class="flex flex-col items-center pointer-events-none">
-                <svg class="w-12 h-12 text-emerald-500 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-                </svg>
-                <p class="text-gray-200 font-semibold mb-1">اضغط هنا لاختيار ملف أو اسحبه وأفلته هنا</p>
-                <p class="text-gray-500 text-xs">تدعم جميع أنواع الملفات (صور، مستندات، ملفات مضغوطة...)</p>
+        <!-- قسم المُرسل (إرسال ملف) -->
+        <div id="sender-section" class="hidden">
+            <div class="border-2 border-dashed border-gray-700 hover:border-emerald-500 rounded-xl p-6 mb-4 cursor-pointer relative bg-gray-950/50">
+                <input type="file" id="file-input" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="prepareFile(event)">
+                <p id="file-label" class="text-gray-300 font-medium">اضغط لاختيار ملف للإرسال</p>
+            </div>
+            
+            <div id="link-box" class="hidden mt-4">
+                <p class="text-xs text-emerald-400 mb-2">✨ انسخ الرابط وأرسله لصديقك (حافظ على فتح هذه الصفحة):</p>
+                <div class="flex gap-2">
+                    <input type="text" id="share-url" readonly class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 text-center" dir="ltr">
+                    <button onclick="copyShareLink()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shrink-0">
+                        نسخ
+                    </button>
+                </div>
             </div>
         </div>
 
-        <!-- معلومات الملف المختار (تظهر بعد الاختيار) -->
-        <div id="file-info" class="hidden bg-gray-800/60 border border-gray-700 rounded-xl p-4 mb-6">
-            <div class="flex items-center justify-between mb-2">
-                <span id="file-name" class="font-medium text-emerald-400 truncate max-w-[280px]">filename.zip</span>
-                <span id="file-size" class="text-xs text-gray-400 bg-gray-700 px-2 py-1 rounded">0 MB</span>
+        <!-- قسم المُستقبل (استقبال ملف عبر الرابط) -->
+        <div id="receiver-section" class="hidden">
+            <div id="receiving-status" class="p-4 bg-gray-800/60 rounded-xl mb-4">
+                <p class="text-sm text-gray-300">جاري الاتصال بالمرسل لتحميل الملف...</p>
             </div>
-            <button onclick="uploadFile()" id="upload-btn" class="w-full mt-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 rounded-lg transition-colors shadow-lg">
-                بدء الرفع وتوليد الرابط
-            </button>
-        </div>
-
-        <!-- قسم النتيجة والرابط (يظهر بعد الرفع) -->
-        <div id="result-section" class="hidden border border-emerald-500/30 bg-emerald-950/20 rounded-xl p-4">
-            <h3 class="text-sm font-semibold text-emerald-400 mb-2 flex items-center gap-1">
-                <span>🚀 تم توليد الرابط بنجاح!</span>
-            </h3>
-            <div class="flex gap-2">
-                <input type="text" id="generated-link" readonly class="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-300 focus:outline-none" dir="ltr">
-                <button onclick="copyLink()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shrink-0">
-                    نسخ
-                </button>
-            </div>
+            <a id="download-btn" class="hidden block w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-xl transition-colors shadow-lg">
+                تحميل الملف الآن 📥
+            </a>
         </div>
     </div>
 
     <script>
+        let peer;
         let selectedFile = null;
+        const statusBadge = document.getElementById('status-badge');
 
-        function handleFileSelect(event) {
-            const file = event.target.files[0];
-            if (!file) return;
+        peer = new Peer();
 
-            selectedFile = file;
-            document.getElementById('file-name').innerText = file.name;
-            document.getElementById('file-size').innerText = formatBytes(file.size);
-            document.getElementById('file-info').classList.remove('hidden');
-            document.getElementById('result-section').classList.add('hidden');
-        }
+        peer.on('open', (id) => {
+            statusBadge.innerText = 'متصل وجاهز!';
+            statusBadge.className = 'mb-4 inline-block px-3 py-1 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800';
 
-        function uploadFile() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const senderId = urlParams.get('peer');
+
+            if (senderId) {
+                document.getElementById('receiver-section').classList.remove('hidden');
+                connectToSender(senderId);
+            } else {
+                document.getElementById('sender-section').classList.remove('hidden');
+            }
+        });
+
+        function prepareFile(event) {
+            selectedFile = event.target.files[0];
             if (!selectedFile) return;
 
-            const btn = document.getElementById('upload-btn');
-            btn.innerText = 'جاري الرفع...';
-            btn.disabled = true;
+            document.getElementById('file-label').innerText = `تم اختيار: ${selectedFile.name}`;
+            
+            const baseUrl = window.location.href.split('?')[0];
+            const fullLink = `${baseUrl}?peer=${peer.id}`;
 
-            // محاكاة عملية الرفع (مع تأخير زمني بسيط لتظهر كأنها عملية حقيقية)
-            setTimeout(() => {
-                btn.innerText = 'بدء الرفع وتوليد الرابط';
-                btn.disabled = false;
-                document.getElementById('file-info').classList.add('hidden');
-                
-                // توليد رابط وهمي تجريبي (لاحقاً سيأتي الرابط من السيرفر على Railway)
-                const randomId = Math.random().toString(36).substring(2, 8);
-                const fakeUrl = `https://jawad-files.railway.app/download/${randomId}/${selectedFile.name}`;
-                
-                document.getElementById('generated-link').value = fakeUrl;
-                document.getElementById('result-section').classList.remove('hidden');
-            }, 1500);
+            document.getElementById('share-url').value = fullLink;
+            document.getElementById('link-box').classList.remove('hidden');
         }
 
-        function copyLink() {
-            const linkInput = document.getElementById('generated-link');
-            linkInput.select();
-            navigator.clipboard.writeText(linkInput.value);
+        function copyShareLink() {
+            const input = document.getElementById('share-url');
+            input.select();
+            navigator.clipboard.writeText(input.value);
             alert('تم نسخ الرابط إلى الحافظة بنجاح!');
         }
 
-        function formatBytes(bytes, decimals = 2) {
-            if (bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const dm = decimals < 0 ? 0 : decimals;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        peer.on('connection', (conn) => {
+            conn.on('open', () => {
+                statusBadge.innerText = 'متصل مع صديق، جاري إرسال الملف...';
+                conn.send({
+                    file: selectedFile,
+                    name: selectedFile.name,
+                    type: selectedFile.type
+                });
+            });
+        });
+
+        function connectToSender(senderId) {
+            const conn = peer.connect(senderId);
+
+            conn.on('data', (data) => {
+                document.getElementById('receiving-status').innerHTML = `<p class="text-sm text-emerald-400 font-semibold">✨ تم استلام الملف بنجاح!</p>`;
+                
+                const blob = new Blob([data.file], { type: data.type });
+                const fileUrl = URL.createObjectURL(blob);
+                
+                const downloadBtn = document.getElementById('download-btn');
+                downloadBtn.href = fileUrl;
+                downloadBtn.download = data.name;
+                downloadBtn.classList.remove('hidden');
+            });
         }
     </script>
 </body>
