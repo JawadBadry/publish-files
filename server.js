@@ -39,7 +39,7 @@ app.post('/upload', upload.single('file'), (req, res) => {
 
     // توليد رابط التحميل الحقيقي بناءً على عنوان السيرفر الحالي
     const host = req.get('host');
-    const fileUrl = `https://${host}/uploads/${req.file.filename}`;
+    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
     
     res.json({ url: fileUrl });
 });
